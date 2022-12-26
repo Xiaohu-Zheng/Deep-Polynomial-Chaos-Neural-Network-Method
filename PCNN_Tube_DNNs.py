@@ -13,7 +13,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from torch.autograd import Variable
 
-sys.path.append('/mnt/jfs/zhengxiaohu/PCNN')
+sys.path.append('/mnt/jfs/zhengxiaohu/GitHub/Deep-Polynomial-Chaos-Neural-Network-Method')
 import Deep_PCE as dPC
 import data_process as dp
 from tube_fun import tube_fun
@@ -29,12 +29,12 @@ else:
 # device = torch.device('cpu')
 print(os.getpid())
 
-root_path = "/mnt/jfs/zhengxiaohu/PCNN/Tube_PCNN/"
-data_path = '/mnt/jfs/zhengxiaohu/PCNN/Tube_PCNN/tube_data/'
+root_path = "/mnt/jfs/zhengxiaohu/GitHub/Deep-Polynomial-Chaos-Neural-Network-Method/"
+data_path = '/mnt/jfs/zhengxiaohu/GitHub/Deep-Polynomial-Chaos-Neural-Network-Method/tube_data/'
 
-# 目标函数
-# train = True
-train = False
+# Basic parameter
+train = True
+# train = False
 model = 3
 pc_dpce='apc'
 pc_pcnn='apc'
@@ -47,7 +47,7 @@ x_coeff_batch_size = 20000
 max_epoch = 20000
 object_fun = f"PCNN_{order_pc}order_sat_frame" + "_" + pc_dpce + "_" + pc_pcnn + f"_model_{model}"
 
-# 参数
+# Parameters
 m_t = 5
 sigma_t = 0.1
 
@@ -76,7 +76,7 @@ sigma_T= 9000
 m_Sy= 220
 sigma_Sy = 22
 
-# 计算gumbel分布的参数
+# Gumbel Parameter
 m_P = 1.2e4
 sigma_P = m_P * 0.1
 v_P = sigma_P ** 2
@@ -88,7 +88,7 @@ std = torch.tensor([[sigma_t, sigma_d, sigma_L1, sigma_L2, sigma_F1,
                        sigma_F2, sigma_P, sigma_T, sigma_Sy]])
 
 if train:
-    # 准备有标签数据
+    # Prepare training data
     data = data_path + 'samples_{}.mat'.format(x_num)
     data = sio.loadmat(data)
     X_train = torch.from_numpy(data['X']).float()
@@ -96,19 +96,20 @@ if train:
     y_train = tube_fun(X_train)
     dataset = dp.TensorDataset(x_train, y_train)
 
-    # 加载训练数据
+    # Loading training data
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=50000,
                                             shuffle=True, num_workers=2)
 
-    # 准备无标签数据5order: 7e+05
-    num_coeff = int(7e+05)
+    # Prepare unlabeled data
+    # Determine the number of unlabeled data according to the studied problem.
+    num_coeff = int(1e+05)
     data_coeff = data_path + f'samples_{num_coeff}.mat'
     data_coeff = sio.loadmat(data_coeff)
     X_coeff = torch.from_numpy(data_coeff['X']).float()
     x_coeff = (X_coeff - mean) / std
 
-    # 准备测试数据集
-    num_test = 10000
+    # Prepare testing data
+    num_test = 1000
     data_test = data_path + 'samples_{}.mat'.format(num_test)
     data_test = sio.loadmat(data_test)
     X_test = torch.from_numpy(data_test['X']).float()
@@ -116,37 +117,37 @@ if train:
     y_test = tube_fun(X_test)
 
 
-# 计算k阶中心矩
+# Calculate K-order moment
 mu_k_rooth = root_path + 'mu_ks/mu_k.mat'
 mu_k_temp = sio.loadmat(mu_k_rooth)
 mu_k = torch.from_numpy(mu_k_temp['mu_k']).float()
 p_orders = dPC.all_orders_univariate_basis_coefficients(mu_k, order_pc)
 
-# 初始化模型
+# Initialize model
 order_mat = dPC.order_mat_fun(dim, order)
 order_mat_pc = dPC.order_mat_fun(dim, order_pc)
 num_c = order_mat.size(0)
 c = torch.rand(1, order_mat_pc.size(0)) * 0.1
-c[0, 0] = 85.81681060791016
+c[0, 0] = 85.8168
 
 if model == 0:
-    # 模型-1：
+    # model-0：
     hiden_neurons = [32, 64, 128, 128, 64, 64]
 elif model == 1:
-    # 模型-1：
+    # model-1：
     hiden_neurons = [32, 64, 128, 64, 64]
 elif model == 2:
-    # 模型-2：
+    # model-2：
     hiden_neurons = [32, 64, 128, 64]
 elif model == 3:
-    # 模型-3：
+    # model-3：
     hiden_neurons = [32, 128, 64]
 elif model == 4:
-    # 模型-4：
+    # model-4：
     hiden_neurons = [128, 64]
 net_c = PCNN(dim, num_c, hiden_neurons, c)
 
-# 定义优化器
+# Defining optimizer
 net_c = net_c.to(device)
 criterion = nn.L1Loss()
 criterion_pce_loss = CalculatePCELoss(order, order_mat, pc_dpce, p_orders)
@@ -154,11 +155,9 @@ criterion_coeff_deep = CoefficientPCELoss()
 criterion_coeff = CoefficientPCENNLoss(lam_mean=1, lam_var=1)
 optimizer_c = optim.Adam(net_c.parameters(), lr=lr_c)
 
-# 训练模型
+# Training model
 test_acc_best = 0.03
 if train:
-    # net_c.load_state_dict(torch.load('/mnt/jfs/zhengxiaohu/PCNN/Tube_PCNN/well_trained_model/PCNN_4order_sat_frame_apc_apc_model_2_model_c_90_20001_temp.pth',
-    # map_location='cuda:0'))
     print("training on ", device)
     x_coeff = x_coeff.to(device)
     phi_x_coeff = dPC.orthogonal_basis(x_coeff, order_pc, order_mat_pc, pc_pcnn, p_orders, x_coeff_batch_size)
@@ -170,12 +169,12 @@ if train:
 
         train_l_fea_sum, train_l_c_sum, train_acc_sum, batch_count, start = 0.0, 0.0, 0.0, 0, time.time()
         for i, data in enumerate(dataloader, 0):
-            # 获得输入
+            # Obtain input
             x, y = data
             x, y = x.to(device), y.to(device)
             phi_x = dPC.orthogonal_basis(x, order_pc, order_mat_pc, pc_pcnn, p_orders)
             
-            # 梯度归零
+            # Gradient return to zero
             optimizer_c.zero_grad()
 
             # net_c forward + backward + optimize
@@ -188,8 +187,7 @@ if train:
             c = net_c.state_dict()['c']
             loss_dpce_coeff = criterion_coeff_deep(y_dpce_coeff, c_coeff)
             loss_diff_coeff = criterion(y_dpce_coeff.detach(), y_pcnn_coeff)
-            # loss_pce_coeff = criterion_coeff(y_pce_coeff, c)
-            loss = loss_y_pcnn + loss_y_dpce + loss_diff_coeff + loss_dpce_coeff #+ loss_pce_coeff
+            loss = loss_y_pcnn + loss_y_dpce + loss_diff_coeff + loss_dpce_coeff
 
             loss.backward()
             optimizer_c.step()
@@ -219,13 +217,13 @@ if train:
 
     print('Train time:', time.time() - start_train)
 
-    # 保存训练的模型
+    # Save the trained model
     if not os.path.exists(root_path + 'trained_models'):
         os.makedirs(root_path + 'trained_models')
     torch.save(net_c.state_dict(), root_path +
             'trained_models/{}_model_c_{}_{}.pth'.format(object_fun, x_num, max_epoch))
 
-# 模型预测
+# Model prediction
 net_c.load_state_dict(torch.load(
     root_path + 'trained_models/{}_model_c_{}_{}_temp.pth'.format(object_fun, x_num, max_epoch),
     map_location='cuda:0'))
@@ -237,7 +235,7 @@ for i in range(len(c_rest)):
     var += c_rest[i] ** 2
 print(c_train[0, 0], var ** 0.5)
 
-num_pre = int(2e5)
+num_pre = int(1e5)
 pre_batch_size = 20000
 num_batch = math.ceil(num_pre/pre_batch_size)
 
@@ -261,7 +259,7 @@ Y_pcnn_pre, Y_dpce_pre = PCNN.prediction(x_pred, num_batch)
 # y_pce = torch.sum(phi_x * c_train, dim=1).view(-1, 1)
 # print(time.time() - start)
 
-# 计算PCE模型的均值及方差
+# Mean and standard deviation
 mean_by_c = c_train[0, 0]
 c_mean_inter = c_train[0, 1:]
 std_by_c = ((c_mean_inter ** 2).sum()) ** 0.5
@@ -340,7 +338,7 @@ print('R2_dpce:%.8f'%(R2_dpce))
 # print('e3_pcnn:%.8f'%(e3_pcnn))
 # print('e3_nn:%.8f'%(e3_dpce))
 
-# Failure probability 185.7
+# Failure probability
 threshold = 0
 prob_mcs = dp.probability_fun(y_grd, threshold)
 prob_pcnn = dp.probability_fun(Y_pcnn_pre.cpu(), threshold)
@@ -352,60 +350,3 @@ print('prob_PCNN:%.8f'%(prob_pcnn))
 print('prob_DPCE:%.8f'%(prob_dpce))
 print('prob_pcnn_error:%.4f'%(prob_pcnn_error))
 print('prob_dpce_error:%.4f'%(prob_dpce_error))
-
-error_PCNN = torch.abs(y_grd - Y_pcnn_pre.cpu())
-file_name = f'errors/errors_PCNN_{order_pc}order.mat'
-path = root_path + file_name
-data = {f"error_PCNN_{order_pc}order": error_PCNN.numpy()}
-sio.savemat(path, data)
-
-error_DPCE = torch.abs(y_grd - Y_dpce_pre.cpu())
-file_name = f'errors/errors_DPCE_2order.mat'
-path = root_path + file_name
-data = {f"error_DPCE_2order": error_DPCE.numpy()}
-sio.savemat(path, data)
-
-# # 画统计直方图
-import matplotlib.font_manager as fm
-my_font = fm.FontProperties(fname="/mnt/jfs/zhengxiaohu/times/times.ttf")
-plt.figure(figsize=[4, 2.5], dpi=360) #violet
-sns.distplot(y_grd, bins=50, norm_hist=True, hist = True, kde=False, color="green")
-sns.distplot(Y_pcnn_pre.cpu(), bins=50, norm_hist=True, hist = False, kde=True, color="blue", 
-         kde_kws={"color": "blue", "lw": 1.5, 'linestyle':'-'},
-         label='PCNN')
-sns.distplot(y_grd, bins=50, norm_hist=True, hist = False, kde=True, color="green",
-         kde_kws={"color": "green", "lw": 1.5, 'linestyle':'--'},
-         label='MCS')
-plt.grid(axis='y', alpha=0.1)
-plt.xlabel('Performance function value', fontproperties=my_font)
-plt.ylabel('Density', fontproperties=my_font)
-plt.xticks(fontproperties=my_font)
-plt.yticks(fontproperties=my_font)
-plt.legend(prop=my_font)
-plt.savefig(
-    root_path + 'figs/Tube_{}order_PCNN.pdf'.format(order_pc), bbox_inches = 'tight', pad_inches=0.02)
-plt.savefig(
-    root_path + 'figs/Tube_{}order_PCNN.png'.format(order_pc), bbox_inches = 'tight', pad_inches=0.02)
-
-path = root_path+f'errors/y_OLS_{order_pc}order.mat'
-data = sio.loadmat(path)
-y_compare = torch.from_numpy(data[f'y_OLS_{order_pc}order']).float()
-
-plt.figure(figsize=[4, 2.5], dpi=360) #violet
-sns.distplot(y_grd, bins=50, norm_hist=True, hist = True, kde=False, color="green")
-sns.distplot(y_compare, bins=50, norm_hist=True, hist = False, kde=True, color="blue", 
-         kde_kws={"color": "blue", "lw": 1.5, 'linestyle':'-'},
-         label='PCNN')
-sns.distplot(y_grd, bins=50, norm_hist=True, hist = False, kde=True, color="green",
-         kde_kws={"color": "green", "lw": 1.5, 'linestyle':'--'},
-         label='MCS')
-plt.grid(axis='y', alpha=0.1)
-plt.xlabel('Performance function value', fontproperties=my_font)
-plt.ylabel('Density', fontproperties=my_font)
-plt.xticks(fontproperties=my_font)
-plt.yticks(fontproperties=my_font)
-plt.legend(prop=my_font)
-plt.savefig(
-    root_path + 'figs/Tube_{}order_OLS.pdf'.format(order_pc), bbox_inches = 'tight', pad_inches=0.02)
-plt.savefig(
-    root_path + 'figs/Tube_{}order_OLS.png'.format(order_pc), bbox_inches = 'tight', pad_inches=0.02)
